@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 
-type Tab = 'create' | 'qr' | 'disconnect' | 'delete';
+type Tab = 'create' | 'disconnect' | 'delete';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('create');
@@ -16,14 +16,9 @@ const App: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  // State for QR retrieval form
-  const [qrCountryCode, setQrCountryCode] = useState('+91');
-  const [qrWhatsappNumber, setQrWhatsappNumber] = useState('');
-  const [qrInputError, setQrInputError] = useState<string | null>(null);
-  const [isFetchingQr, setIsFetchingQr] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
-  const [qrError, setQrError] = useState<string | null>(null);
+  const [creationStatus, setCreationStatus] = useState<'idle' | 'creating' | 'generating_qr'>('idle');
+
 
   // State for disconnection form
   const [disconnectCountryCode, setDisconnectCountryCode] = useState('+91');
@@ -42,7 +37,6 @@ const App: React.FC = () => {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const CREATE_URL = 'https://fastapi.ameegolabs.com/webhook/create';
-  const CONNECT_URL = 'https://fastapi.ameegolabs.com/webhook/connect';
   const DISCONNECT_URL = 'https://fastapi.ameegolabs.com/webhook/disconnect';
   const DELETE_URL = 'https://fastapi.ameegolabs.com/webhook/delete';
 
@@ -52,6 +46,12 @@ const App: React.FC = () => {
 
   const validateCreationForm = (showErrors = false): boolean => {
     const newErrors: { [key: string]: string | null } = {};
+
+    if (!name.trim()) {
+        newErrors.name = 'Name is required.';
+    } else {
+        newErrors.name = null;
+    }
 
     if (!countryCode) {
         newErrors.whatsappNumber = 'Country code is required.';
@@ -72,38 +72,25 @@ const App: React.FC = () => {
     } else {
         newErrors.email = null;
     }
-      
-    if (!name.trim()) {
-        newErrors.name = 'Name is required.';
-    } else {
-        newErrors.name = null;
-    }
 
     if(showErrors) {
       setErrors(newErrors);
     }
     return !newErrors.whatsappNumber && !newErrors.email && !newErrors.name;
   };
-  
-  useEffect(() => {
-    if (whatsappNumber || countryCode || email || name) {
-        validateCreationForm(true);
-    } else {
-        setErrors({});
-    }
-  }, [whatsappNumber, countryCode, email, name]);
-
 
   const handleCreateSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setSubmitError(null);
-    setSubmitSuccess(null);
   
     if (!validateCreationForm(true)) {
       return;
     }
   
+    setSubmitError(null);
+    setSubmitSuccess(null);
+    setQrCodeUrl(null);
     setIsSubmitting(true);
+    setCreationStatus('creating');
   
     const fullWhatsappNumber = `${countryCode.replace('+', '')}${whatsappNumber}`;
 
@@ -114,92 +101,44 @@ const App: React.FC = () => {
     };
   
     try {
-      const response = await fetch(CREATE_URL, {
+      const createResponse = await fetch(CREATE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
   
-      const data = await response.json().catch(() => {
-        throw new Error('Failed to parse server response. Please try again.');
+      const createData = await createResponse.json().catch(() => {
+        return { 
+          success: false, 
+          message: 'Server returned an invalid response. Please try again.' 
+        };
       });
-  
-      if (response.ok && data.success === true) {
-        setSubmitSuccess('Bot created successfully! Now you can get your QR code.');
-        setWhatsappNumber('');
-        setCountryCode('+91');
-        setEmail('');
-        setName('');
-        setErrors({});
-      } else {
-        throw new Error(data.message || 'An unknown error occurred during bot creation.');
+
+      if (!createResponse.ok || !createData.qrCode) {
+        throw new Error(createData.message || 'An unknown error occurred and QR code was not received.');
       }
+
+      const qrSrc = createData.qrCode;
+      
+      const successMessage = 'Scan this QR to connect and create bot.';
+      
+      setCreationStatus('generating_qr');
+      
+      await new Promise(resolve => setTimeout(resolve, 10000));
+
+      setQrCodeUrl(qrSrc);
+      setSubmitSuccess(successMessage);
+      setWhatsappNumber('');
+      setCountryCode('+91');
+      setEmail('');
+      setName('');
+      setErrors({});
   
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'An unknown error occurred.');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleQrSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setQrError(null);
-    setQrCodeUrl(null);
-    setQrInputError(null);
-    
-    let hasError = false;
-    if (!qrCountryCode) {
-        setQrInputError('Country code is required.');
-        hasError = true;
-    } else if (!/^\+\d{1,4}$/.test(qrCountryCode)) {
-        setQrInputError('Invalid country code format (e.g., +91).');
-        hasError = true;
-    } else if (!qrWhatsappNumber.trim()) {
-        setQrInputError('WhatsApp Number is required.');
-        hasError = true;
-    } else if (!/^\d{10}$/.test(qrWhatsappNumber)) {
-        setQrInputError('WhatsApp Number must be exactly 10 digits.');
-        hasError = true;
-    }
-
-    if (hasError) {
-        return;
-    }
-
-    setIsFetchingQr(true);
-
-    try {
-        const fullQrWhatsappNumber = `${qrCountryCode.replace('+', '')}${qrWhatsappNumber}`;
-        const fetchPromise = fetch(CONNECT_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ WhatsAppNumber: fullQrWhatsappNumber }),
-        });
-        
-        const timeoutPromise = new Promise(resolve => setTimeout(resolve, 10000));
-        
-        const [response] = await Promise.all([fetchPromise, timeoutPromise]);
-
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => null);
-            throw new Error(errorData?.message || 'Bot not found or invalid data.');
-        }
-
-        const data = await response.json();
-        const qrSrc = data.qrCode; 
-
-        if (!qrSrc) {
-            throw new Error('QR Code not found in the response.');
-        }
-        
-        setQrCodeUrl(qrSrc);
-
-    } catch (error) {
-        setQrError(error instanceof Error ? error.message : 'An unknown error occurred.');
-    } finally {
-        setIsFetchingQr(false);
+      setCreationStatus('idle');
     }
   };
 
@@ -317,7 +256,6 @@ const App: React.FC = () => {
   
   const TABS: { id: Tab, label: string, icon: JSX.Element }[] = [
     { id: 'create', label: 'Create Bot', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" /></svg> },
-    { id: 'qr', label: 'Get QR Code', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 5a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 01-1 1H6a1 1 0 01-1-1V5zM11 5a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 01-1 1h-2a1 1 0 01-1-1V5zM5 11a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 01-1 1H6a1 1 0 01-1-1v-2zM12 11a1 1 0 00-1 1v2a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 00-1-1h-2z" /></svg> },
     { id: 'disconnect', label: 'Disconnect', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 1a9 9 0 100 18 9 9 0 000-18zm0 16a7 7 0 110-14 7 7 0 010 14zm-1-8a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zm-5 4a1 1 0 110-2h6a1 1 0 110 2H7z" clipRule="evenodd" /></svg> },
     { id: 'delete', label: 'Delete', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg> },
   ];
@@ -452,29 +390,18 @@ const App: React.FC = () => {
                   {renderTextInput('create-name', 'Name', 'Enter your name', name, e => setName(e.target.value), errors.name)}
                   {renderPhoneNumberInput('create', countryCode, e => setCountryCode(e.target.value), whatsappNumber, e => setWhatsappNumber(e.target.value.replace(/\D/g, '')), errors.whatsappNumber)}
                   {renderEmailInput('create-email', email, e => setEmail(e.target.value), errors.email)}
-                  {submitSuccess && <div className="bg-green-500/10 border border-green-500/30 text-green-300 px-4 py-3 rounded-lg text-sm" role="alert">{submitSuccess}</div>}
+                  
+                  {submitSuccess && !qrCodeUrl && <div className="bg-green-500/10 border border-green-500/30 text-green-300 px-4 py-3 rounded-lg text-sm" role="alert">{submitSuccess}</div>}
                   {submitError && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg text-sm" role="alert">{submitError}</div>}
-                  <button type="submit" disabled={isSubmitting || !validateCreationForm()} className="w-full flex items-center justify-center text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:outline-none focus:ring-indigo-500/50 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 disabled:bg-gray-700 disabled:cursor-not-allowed disabled:hover:bg-gray-700">
+                  
+                  <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:outline-none focus:ring-indigo-500/50 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 disabled:bg-gray-700 disabled:cursor-not-allowed disabled:hover:bg-gray-700">
                     {isSubmitting ? renderSpinner() : null}
-                    {isSubmitting ? 'Creating...' : 'Create Bot'}
+                    {isSubmitting ? (creationStatus === 'generating_qr' ? 'Preparing QR Code...' : 'Creating...') : 'Create Bot and Get QR'}
                   </button>
                 </form>
-              </section>
-            )}
-
-            {activeTab === 'qr' && (
-              <section>
-                <form onSubmit={handleQrSubmit} noValidate className="space-y-6">
-                  {renderPhoneNumberInput('qr', qrCountryCode, e => setQrCountryCode(e.target.value), qrWhatsappNumber, e => setQrWhatsappNumber(e.target.value.replace(/\D/g, '')), qrInputError)}
-                  <button type="submit" disabled={isFetchingQr} className="w-full flex items-center justify-center text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:outline-none focus:ring-indigo-500/50 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 disabled:bg-gray-700 disabled:cursor-not-allowed">
-                     {isFetchingQr ? renderSpinner() : null}
-                     {isFetchingQr ? 'Generating...' : 'Get QR Code'}
-                  </button>
-                </form>
-                {qrError && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg text-sm mt-4" role="alert">{qrError}</div>}
-                {qrCodeUrl && !isFetchingQr && (
-                  <div className="mt-6 flex flex-col items-center gap-4 text-center bg-gray-900/50 p-6 rounded-lg border border-gray-700">
-                      <p className="text-green-400 font-semibold">Scan this QR code in WhatsApp to connect!</p>
+                {qrCodeUrl && !isSubmitting && (
+                  <div className="mt-6 flex flex-col items-center gap-4 text-center bg-gray-900/50 p-6 rounded-lg border border-gray-700 animate-fade-in-up">
+                      <p className="text-green-400 font-semibold">{submitSuccess}</p>
                       <div className="p-2 bg-white rounded-lg shadow-lg">
                         <img src={qrCodeUrl} alt="QR Code" className="w-64 h-64" />
                       </div>
@@ -505,7 +432,7 @@ const App: React.FC = () => {
               <section className="space-y-6">
                 <div className="text-center bg-red-500/10 p-4 rounded-lg border border-red-500/20">
                   <h3 className="font-semibold text-red-300">Delete Your Bot</h3>
-                  <p className="text-sm text-red-400/80 mt-1">Warning: This action is irreversible and will permanently delete your bot.</p>
+                  <p className="text-sm text-red-400/80 mt-1">Warning: This action is irreversible. It will permanently delete your bot, all of its data, and the associated spreadsheet.</p>
                 </div>
                 <form onSubmit={handleDeleteSubmit} noValidate className="space-y-6">
                   {renderPhoneNumberInput('delete', deleteCountryCode, e => setDeleteCountryCode(e.target.value), deleteWhatsappNumber, e => setDeleteWhatsappNumber(e.target.value.replace(/\D/g, '')), deleteInputError)}
