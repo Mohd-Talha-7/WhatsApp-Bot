@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 type Tab = 'create' | 'disconnect' | 'delete';
 
@@ -18,6 +18,7 @@ const App: React.FC = () => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [creationStatus, setCreationStatus] = useState<'idle' | 'creating' | 'generating_qr'>('idle');
+  const [hasAttemptedCreate, setHasAttemptedCreate] = useState(false);
 
 
   // State for disconnection form
@@ -27,6 +28,7 @@ const App: React.FC = () => {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [disconnectSuccess, setDisconnectSuccess] = useState<string | null>(null);
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  const [hasAttemptedDisconnect, setHasAttemptedDisconnect] = useState(false);
 
   // State for deletion form
   const [deleteCountryCode, setDeleteCountryCode] = useState('+91');
@@ -35,6 +37,9 @@ const App: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [hasAttemptedDelete, setHasAttemptedDelete] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
 
   const CREATE_URL = 'https://fastapi.ameegolabs.com/webhook/create';
   const DISCONNECT_URL = 'https://fastapi.ameegolabs.com/webhook/disconnect';
@@ -44,7 +49,7 @@ const App: React.FC = () => {
     setIsMounted(true);
   }, []);
 
-  const validateCreationForm = (showErrors = false): boolean => {
+  const validateCreationForm = useCallback((showErrors = false): boolean => {
     const newErrors: { [key: string]: string | null } = {};
 
     if (!name.trim()) {
@@ -77,11 +82,66 @@ const App: React.FC = () => {
       setErrors(newErrors);
     }
     return !newErrors.whatsappNumber && !newErrors.email && !newErrors.name;
-  };
+  }, [name, countryCode, whatsappNumber, email]);
+
+  useEffect(() => {
+    if (hasAttemptedCreate) {
+      validateCreationForm(true);
+    }
+  }, [hasAttemptedCreate, validateCreationForm]);
+  
+  const validateDisconnectForm = useCallback((showErrors = false): boolean => {
+      let error: string | null = null;
+      if (!disconnectCountryCode) {
+          error = 'Country code is required.';
+      } else if (!/^\+\d{1,4}$/.test(disconnectCountryCode)) {
+          error = 'Invalid country code format (e.g., +91).';
+      } else if (!disconnectWhatsappNumber.trim()) {
+          error = 'WhatsApp Number is required.';
+      } else if (!/^\d{10}$/.test(disconnectWhatsappNumber)) {
+          error = 'WhatsApp Number must be exactly 10 digits.';
+      }
+  
+      if (showErrors) {
+          setDisconnectInputError(error);
+      }
+      return error === null;
+  }, [disconnectCountryCode, disconnectWhatsappNumber]);
+
+  useEffect(() => {
+      if (hasAttemptedDisconnect) {
+          validateDisconnectForm(true);
+      }
+  }, [hasAttemptedDisconnect, validateDisconnectForm]);
+
+  const validateDeleteForm = useCallback((showErrors = false): boolean => {
+      let error: string | null = null;
+      if (!deleteCountryCode) {
+          error = 'Country code is required.';
+      } else if (!/^\+\d{1,4}$/.test(deleteCountryCode)) {
+          error = 'Invalid country code format (e.g., +91).';
+      } else if (!deleteWhatsappNumber.trim()) {
+          error = 'WhatsApp Number is required.';
+      } else if (!/^\d{10}$/.test(deleteWhatsappNumber)) {
+          error = 'WhatsApp Number must be exactly 10 digits.';
+      }
+      
+      if (showErrors) {
+          setDeleteInputError(error);
+      }
+      return error === null;
+  }, [deleteCountryCode, deleteWhatsappNumber]);
+  
+  useEffect(() => {
+      if (hasAttemptedDelete) {
+          validateDeleteForm(true);
+      }
+  }, [hasAttemptedDelete, validateDeleteForm]);
 
   const handleCreateSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
   
+    setHasAttemptedCreate(true);
     if (!validateCreationForm(true)) {
       return;
     }
@@ -133,6 +193,7 @@ const App: React.FC = () => {
       setEmail('');
       setName('');
       setErrors({});
+      setHasAttemptedCreate(false);
   
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'An unknown error occurred.');
@@ -144,29 +205,14 @@ const App: React.FC = () => {
 
   const handleDisconnectSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setDisconnectError(null);
-    setDisconnectSuccess(null);
-    setDisconnectInputError(null);
-
-    let hasError = false;
-    if (!disconnectCountryCode) {
-        setDisconnectInputError('Country code is required.');
-        hasError = true;
-    } else if (!/^\+\d{1,4}$/.test(disconnectCountryCode)) {
-        setDisconnectInputError('Invalid country code format (e.g., +91).');
-        hasError = true;
-    } else if (!disconnectWhatsappNumber.trim()) {
-        setDisconnectInputError('WhatsApp Number is required.');
-        hasError = true;
-    } else if (!/^\d{10}$/.test(disconnectWhatsappNumber)) {
-        setDisconnectInputError('WhatsApp Number must be exactly 10 digits.');
-        hasError = true;
-    }
-
-    if (hasError) {
+    setHasAttemptedDisconnect(true);
+    
+    if (!validateDisconnectForm(true)) {
         return;
     }
 
+    setDisconnectError(null);
+    setDisconnectSuccess(null);
     setIsDisconnecting(true);
 
     try {
@@ -187,6 +233,7 @@ const App: React.FC = () => {
             setDisconnectSuccess(data.message || 'Bot disconnected successfully!');
             setDisconnectWhatsappNumber('');
             setDisconnectCountryCode('+91');
+            setHasAttemptedDisconnect(false);
         } else {
             throw new Error(data.message || 'Failed to disconnect bot.');
         }
@@ -198,31 +245,18 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleDeleteSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setHasAttemptedDelete(true);
+    
+    if (validateDeleteForm(true)) {
+        setIsDeleteModalOpen(true);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
     setDeleteError(null);
     setDeleteSuccess(null);
-    setDeleteInputError(null);
-
-    let hasError = false;
-    if (!deleteCountryCode) {
-        setDeleteInputError('Country code is required.');
-        hasError = true;
-    } else if (!/^\+\d{1,4}$/.test(deleteCountryCode)) {
-        setDeleteInputError('Invalid country code format (e.g., +91).');
-        hasError = true;
-    } else if (!deleteWhatsappNumber.trim()) {
-        setDeleteInputError('WhatsApp Number is required.');
-        hasError = true;
-    } else if (!/^\d{10}$/.test(deleteWhatsappNumber)) {
-        setDeleteInputError('WhatsApp Number must be exactly 10 digits.');
-        hasError = true;
-    }
-
-    if (hasError) {
-        return;
-    }
-
     setIsDeleting(true);
 
     try {
@@ -243,6 +277,7 @@ const App: React.FC = () => {
             setDeleteSuccess(data.message || 'Bot deleted successfully!');
             setDeleteWhatsappNumber('');
             setDeleteCountryCode('+91');
+            setHasAttemptedDelete(false);
         } else {
             throw new Error(data.message || 'Failed to delete bot. It might not exist.');
         }
@@ -251,6 +286,7 @@ const App: React.FC = () => {
         setDeleteError(error instanceof Error ? error.message : 'An unknown error occurred.');
     } finally {
         setIsDeleting(false);
+        setIsDeleteModalOpen(false);
     }
   };
   
@@ -438,9 +474,8 @@ const App: React.FC = () => {
                   {renderPhoneNumberInput('delete', deleteCountryCode, e => setDeleteCountryCode(e.target.value), deleteWhatsappNumber, e => setDeleteWhatsappNumber(e.target.value.replace(/\D/g, '')), deleteInputError)}
                   {deleteSuccess && <div className="bg-green-500/10 border border-green-500/30 text-green-300 px-4 py-3 rounded-lg text-sm" role="alert">{deleteSuccess}</div>}
                   {deleteError && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg text-sm" role="alert">{deleteError}</div>}
-                  <button type="submit" disabled={isDeleting} className="w-full flex items-center justify-center text-white bg-red-600 hover:bg-red-700 focus:ring-4 focus:outline-none focus:ring-red-500/50 font-medium rounded-lg text-sm px-5 py-3 text-center transition-colors duration-300 disabled:bg-gray-700 disabled:cursor-not-allowed">
-                     {isDeleting ? renderSpinner() : null}
-                     {isDeleting ? 'Deleting...' : 'Delete Bot Permanently'}
+                  <button type="submit" className="w-full flex items-center justify-center text-white bg-red-600 hover:bg-red-700 focus:ring-4 focus:outline-none focus:ring-red-500/50 font-medium rounded-lg text-sm px-5 py-3 text-center transition-colors duration-300 disabled:bg-gray-700 disabled:cursor-not-allowed">
+                     {'Delete Bot Permanently'}
                   </button>
                 </form>
               </section>
@@ -448,6 +483,40 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+          <div className="bg-gray-800 border border-red-500/30 rounded-2xl shadow-xl w-full max-w-md p-6 text-center animate-fade-in-up">
+            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-500/10">
+              <svg className="h-6 w-6 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            </div>
+            <h3 className="mt-5 text-lg font-semibold text-white" id="delete-modal-title">Confirm Deletion</h3>
+            <p className="mt-2 text-sm text-gray-400">
+              Are you sure you want to delete the bot for {deleteCountryCode}{deleteWhatsappNumber}? This action cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-center gap-4">
+              <button 
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                disabled={isDeleting}
+                className="px-6 py-2.5 text-sm font-medium text-gray-300 bg-gray-700/50 hover:bg-gray-700 rounded-lg transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-gray-500 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="px-6 py-2.5 flex items-center justify-center text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-red-500 disabled:bg-red-800/50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? renderSpinner() : null}
+                {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
