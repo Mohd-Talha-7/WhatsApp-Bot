@@ -1,5 +1,5 @@
 {
   "name": "AI Bot Provisioner",
-  "description": "A professional web page to create and manage AI bot instances. Features a creation form with strict validation for Instance Name (Bot-XXXXXXXXXX), API Key (must match Instance Name), and a 10-digit WhatsApp number. A second form allows users to retrieve an instance's QR code URL by providing its name.",
+  "description": "A professional web page to create and manage AI bot instances. Features a creation form with strict validation for a 10-digit WhatsApp number. Other forms allow users to retrieve an instance's QR code URL, disconnect, or delete the bot instance by providing its WhatsApp number.",
   "requestFramePermissions": []
 }

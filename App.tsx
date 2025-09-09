@@ -1,101 +1,97 @@
 
 import React, { useState, useEffect } from 'react';
 
-// Reusable Input component
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  id: string;
-  label: string;
-  error?: string | null;
-}
-
-const FormInput: React.FC<InputProps> = ({ id, label, error, ...props }) => {
-  return (
-    <div className="relative z-0 w-full mb-8 group">
-      <input
-        {...props}
-        id={id}
-        className={`block py-2.5 px-0 w-full text-sm text-white bg-transparent border-0 border-b-2 appearance-none focus:outline-none focus:ring-0 peer ${
-          error
-            ? 'border-red-500 focus:border-red-600'
-            : 'border-gray-600 focus:border-cyan-500'
-        }`}
-        placeholder=" "
-      />
-      <label
-        htmlFor={id}
-        className={`peer-focus:font-medium absolute text-sm duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6 ${
-          error
-            ? 'text-red-500 peer-focus:text-red-600'
-            : 'text-gray-400 peer-focus:text-cyan-500'
-        }`}
-      >
-        {label}
-      </label>
-      {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
-    </div>
-  );
-};
+type Tab = 'create' | 'qr' | 'disconnect' | 'delete';
 
 const App: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<Tab>('create');
+  const [isMounted, setIsMounted] = useState(false);
+
   // State for creation form
-  const [instanceName, setInstanceName] = useState('');
-  const [apiKey, setApiKey] = useState('');
+  const [countryCode, setCountryCode] = useState('+91');
   const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [errors, setErrors] = useState<{ [key: string]: string | null }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // State for QR retrieval form
-  const [qrInstanceName, setQrInstanceName] = useState('');
+  const [qrCountryCode, setQrCountryCode] = useState('+91');
+  const [qrWhatsappNumber, setQrWhatsappNumber] = useState('');
+  const [qrInputError, setQrInputError] = useState<string | null>(null);
   const [isFetchingQr, setIsFetchingQr] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
 
+  // State for disconnection form
+  const [disconnectCountryCode, setDisconnectCountryCode] = useState('+91');
+  const [disconnectWhatsappNumber, setDisconnectWhatsappNumber] = useState('');
+  const [disconnectInputError, setDisconnectInputError] = useState<string | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [disconnectSuccess, setDisconnectSuccess] = useState<string | null>(null);
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+
+  // State for deletion form
+  const [deleteCountryCode, setDeleteCountryCode] = useState('+91');
+  const [deleteWhatsappNumber, setDeleteWhatsappNumber] = useState('');
+  const [deleteInputError, setDeleteInputError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const CREATE_URL = 'https://fastapi.ameegolabs.com/webhook/create';
   const CONNECT_URL = 'https://fastapi.ameegolabs.com/webhook/connect';
+  const DISCONNECT_URL = 'https://fastapi.ameegolabs.com/webhook/disconnect';
+  const DELETE_URL = 'https://fastapi.ameegolabs.com/webhook/delete';
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const validateCreationForm = (showErrors = false): boolean => {
     const newErrors: { [key: string]: string | null } = {};
 
-    // Validate WhatsApp Number first as Instance Name depends on it
-    if (!whatsappNumber) {
+    if (!countryCode) {
+        newErrors.whatsappNumber = 'Country code is required.';
+    } else if (!/^\+\d{1,4}$/.test(countryCode)) {
+        newErrors.whatsappNumber = 'Invalid country code format (e.g., +91).';
+    } else if (!whatsappNumber) {
         newErrors.whatsappNumber = 'WhatsApp Number is required.';
     } else if (!/^\d{10}$/.test(whatsappNumber)) {
         newErrors.whatsappNumber = 'WhatsApp Number must be exactly 10 digits.';
-    }
-
-    // Validate Instance Name based on WhatsApp Number
-    if (!instanceName) {
-        newErrors.instanceName = 'Instance Name is required.';
-    } else if (newErrors.whatsappNumber) { // If there's already a WhatsApp number error, do a general format check
-        if (!/^Bot-\d{10}$/.test(instanceName)) {
-            newErrors.instanceName = 'Format must be Bot- followed by 10 digits.';
-        }
-    } else { // If WhatsApp number is valid, enforce strict matching
-        const expectedInstanceName = `Bot-${whatsappNumber}`;
-        if (instanceName !== expectedInstanceName) {
-            newErrors.instanceName = `Instance Name must be "${expectedInstanceName}".`;
-        }
-    }
-
-    // Validate API Key
-    if (!apiKey) {
-        newErrors.apiKey = 'Apikey For Instance is required.';
-    } else if (apiKey !== instanceName) {
-        newErrors.apiKey = 'API Key must exactly match the Instance Name.';
+    } else {
+        newErrors.whatsappNumber = null;
     }
     
+    if (!email) {
+        newErrors.email = 'Email address is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        newErrors.email = 'Please enter a valid email address.';
+    } else {
+        newErrors.email = null;
+    }
+      
+    if (!name.trim()) {
+        newErrors.name = 'Name is required.';
+    } else {
+        newErrors.name = null;
+    }
+
     if(showErrors) {
       setErrors(newErrors);
     }
-    return Object.values(newErrors).every(error => error === null || error === undefined);
+    return !newErrors.whatsappNumber && !newErrors.email && !newErrors.name;
   };
   
-  // Effect for real-time validation
   useEffect(() => {
-    validateCreationForm(true);
-  }, [instanceName, apiKey, whatsappNumber]);
+    if (whatsappNumber || countryCode || email || name) {
+        validateCreationForm(true);
+    } else {
+        setErrors({});
+    }
+  }, [whatsappNumber, countryCode, email, name]);
 
 
   const handleCreateSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -109,10 +105,12 @@ const App: React.FC = () => {
   
     setIsSubmitting(true);
   
+    const fullWhatsappNumber = `${countryCode.replace('+', '')}${whatsappNumber}`;
+
     const formData = {
-      InstanceName: instanceName,
-      ApiKey: apiKey,
-      WhatsAppNumber: whatsappNumber,
+      WhatsAppNumber: fullWhatsappNumber,
+      Email: email,
+      Name: name,
     };
   
     try {
@@ -127,14 +125,14 @@ const App: React.FC = () => {
       });
   
       if (response.ok && data.success === true) {
-        setSubmitSuccess('Instance created successfully! Now you can get your QR code.');
-        setInstanceName('');
-        setApiKey('');
+        setSubmitSuccess('Bot created successfully! Now you can get your QR code.');
         setWhatsappNumber('');
+        setCountryCode('+91');
+        setEmail('');
+        setName('');
         setErrors({});
       } else {
-        // This handles both failed HTTP statuses and responses where success is false
-        throw new Error(data.message || 'An unknown error occurred during instance creation.');
+        throw new Error(data.message || 'An unknown error occurred during bot creation.');
       }
   
     } catch (error) {
@@ -148,35 +146,48 @@ const App: React.FC = () => {
     e.preventDefault();
     setQrError(null);
     setQrCodeUrl(null);
+    setQrInputError(null);
+    
+    let hasError = false;
+    if (!qrCountryCode) {
+        setQrInputError('Country code is required.');
+        hasError = true;
+    } else if (!/^\+\d{1,4}$/.test(qrCountryCode)) {
+        setQrInputError('Invalid country code format (e.g., +91).');
+        hasError = true;
+    } else if (!qrWhatsappNumber.trim()) {
+        setQrInputError('WhatsApp Number is required.');
+        hasError = true;
+    } else if (!/^\d{10}$/.test(qrWhatsappNumber)) {
+        setQrInputError('WhatsApp Number must be exactly 10 digits.');
+        hasError = true;
+    }
 
-    if (!qrInstanceName.trim()) {
-        setQrError('Please enter an Instance Name.');
+    if (hasError) {
         return;
     }
 
     setIsFetchingQr(true);
 
     try {
+        const fullQrWhatsappNumber = `${qrCountryCode.replace('+', '')}${qrWhatsappNumber}`;
         const fetchPromise = fetch(CONNECT_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ InstanceName: qrInstanceName }),
+            body: JSON.stringify({ WhatsAppNumber: fullQrWhatsappNumber }),
         });
         
-        // Artificial delay of 10 seconds as requested
         const timeoutPromise = new Promise(resolve => setTimeout(resolve, 10000));
         
-        // Wait for both fetch to complete and 10 seconds to pass
         const [response] = await Promise.all([fetchPromise, timeoutPromise]);
 
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => null);
-            throw new Error(errorData?.message || 'Instance not found or invalid data.');
+            throw new Error(errorData?.message || 'Bot not found or invalid data.');
         }
 
         const data = await response.json();
-        // The prompt specified the response key is 'qrCode'
         const qrSrc = data.qrCode; 
 
         if (!qrSrc) {
@@ -192,66 +203,323 @@ const App: React.FC = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 flex flex-col items-center justify-center p-4 font-sans">
-      <div className="bg-white/10 backdrop-blur-md p-8 sm:p-12 rounded-2xl shadow-2xl max-w-lg w-full border border-white/20">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold text-white">Create Your AI Bot</h1>
+  const handleDisconnectSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setDisconnectError(null);
+    setDisconnectSuccess(null);
+    setDisconnectInputError(null);
+
+    let hasError = false;
+    if (!disconnectCountryCode) {
+        setDisconnectInputError('Country code is required.');
+        hasError = true;
+    } else if (!/^\+\d{1,4}$/.test(disconnectCountryCode)) {
+        setDisconnectInputError('Invalid country code format (e.g., +91).');
+        hasError = true;
+    } else if (!disconnectWhatsappNumber.trim()) {
+        setDisconnectInputError('WhatsApp Number is required.');
+        hasError = true;
+    } else if (!/^\d{10}$/.test(disconnectWhatsappNumber)) {
+        setDisconnectInputError('WhatsApp Number must be exactly 10 digits.');
+        hasError = true;
+    }
+
+    if (hasError) {
+        return;
+    }
+
+    setIsDisconnecting(true);
+
+    try {
+        const fullDisconnectWhatsappNumber = `${disconnectCountryCode.replace('+', '')}${disconnectWhatsappNumber}`;
+        
+        const response = await fetch(DISCONNECT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ WhatsAppNumber: fullDisconnectWhatsappNumber }),
+        });
+
+        const data = await response.json().catch(() => {
+            if (response.ok) return { success: true, message: 'Bot disconnected successfully.' };
+            throw new Error('Failed to parse server response.');
+        });
+
+        if (response.ok && data.success === true) {
+            setDisconnectSuccess(data.message || 'Bot disconnected successfully!');
+            setDisconnectWhatsappNumber('');
+            setDisconnectCountryCode('+91');
+        } else {
+            throw new Error(data.message || 'Failed to disconnect bot.');
+        }
+
+    } catch (error) {
+        setDisconnectError(error instanceof Error ? error.message : 'An unknown error occurred.');
+    } finally {
+        setIsDisconnecting(false);
+    }
+  };
+
+  const handleDeleteSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setDeleteError(null);
+    setDeleteSuccess(null);
+    setDeleteInputError(null);
+
+    let hasError = false;
+    if (!deleteCountryCode) {
+        setDeleteInputError('Country code is required.');
+        hasError = true;
+    } else if (!/^\+\d{1,4}$/.test(deleteCountryCode)) {
+        setDeleteInputError('Invalid country code format (e.g., +91).');
+        hasError = true;
+    } else if (!deleteWhatsappNumber.trim()) {
+        setDeleteInputError('WhatsApp Number is required.');
+        hasError = true;
+    } else if (!/^\d{10}$/.test(deleteWhatsappNumber)) {
+        setDeleteInputError('WhatsApp Number must be exactly 10 digits.');
+        hasError = true;
+    }
+
+    if (hasError) {
+        return;
+    }
+
+    setIsDeleting(true);
+
+    try {
+        const fullDeleteWhatsappNumber = `${deleteCountryCode.replace('+', '')}${deleteWhatsappNumber}`;
+        
+        const response = await fetch(DELETE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ WhatsAppNumber: fullDeleteWhatsappNumber }),
+        });
+
+        const data = await response.json().catch(() => {
+            if (response.ok) return { success: true, message: 'Bot deleted successfully.' };
+            throw new Error('Failed to parse server response.');
+        });
+
+        if (response.ok && data.success === true) {
+            setDeleteSuccess(data.message || 'Bot deleted successfully!');
+            setDeleteWhatsappNumber('');
+            setDeleteCountryCode('+91');
+        } else {
+            throw new Error(data.message || 'Failed to delete bot. It might not exist.');
+        }
+
+    } catch (error) {
+        setDeleteError(error instanceof Error ? error.message : 'An unknown error occurred.');
+    } finally {
+        setIsDeleting(false);
+    }
+  };
+  
+  const TABS: { id: Tab, label: string, icon: JSX.Element }[] = [
+    { id: 'create', label: 'Create Bot', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" /></svg> },
+    { id: 'qr', label: 'Get QR Code', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 5a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 01-1 1H6a1 1 0 01-1-1V5zM11 5a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 01-1 1h-2a1 1 0 01-1-1V5zM5 11a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 01-1 1H6a1 1 0 01-1-1v-2zM12 11a1 1 0 00-1 1v2a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 00-1-1h-2z" /></svg> },
+    { id: 'disconnect', label: 'Disconnect', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 1a9 9 0 100 18 9 9 0 000-18zm0 16a7 7 0 110-14 7 7 0 010 14zm-1-8a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zm-5 4a1 1 0 110-2h6a1 1 0 110 2H7z" clipRule="evenodd" /></svg> },
+    { id: 'delete', label: 'Delete', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg> },
+  ];
+
+  const renderPhoneNumberInput = (
+    idPrefix: string,
+    countryCodeValue: string,
+    onCountryCodeChange: (e: React.ChangeEvent<HTMLInputElement>) => void,
+    numberValue: string,
+    onNumberChange: (e: React.ChangeEvent<HTMLInputElement>) => void,
+    error: string | null
+  ) => (
+    <div className="space-y-2">
+        <label htmlFor={`${idPrefix}-whatsapp-number`} className="block text-sm font-medium text-gray-400">WhatsApp Number</label>
+        <div className="flex items-center gap-2 bg-gray-900/50 border border-gray-700 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all">
+          <input
+              type="text"
+              id={`${idPrefix}-country-code`}
+              value={countryCodeValue}
+              onChange={onCountryCodeChange}
+              className="w-1/4 bg-transparent px-3 py-2.5 text-white placeholder-gray-500 outline-none"
+              placeholder="+91"
+              required
+              aria-label="Country Code"
+          />
+          <span className="text-gray-600">|</span>
+          <input
+              type="tel"
+              id={`${idPrefix}-whatsapp-number`}
+              value={numberValue}
+              onChange={onNumberChange}
+              className="w-3/4 bg-transparent px-3 py-2.5 text-white placeholder-gray-500 outline-none"
+              placeholder="10-digit number"
+              required
+              aria-label="WhatsApp Number"
+          />
         </div>
+      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+    </div>
+  );
+  
+  const renderTextInput = (
+    id: string,
+    label: string,
+    placeholder: string,
+    value: string,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void,
+    error: string | null
+  ) => (
+    <div className="space-y-2">
+      <label htmlFor={id} className="block text-sm font-medium text-gray-400">{label}</label>
+      <div className="bg-gray-900/50 border border-gray-700 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all">
+        <input
+          type="text"
+          id={id}
+          value={value}
+          onChange={onChange}
+          className="w-full bg-transparent px-3 py-2.5 text-white placeholder-gray-500 outline-none"
+          placeholder={placeholder}
+          required
+          aria-label={label}
+        />
+      </div>
+      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+    </div>
+  );
 
-        {/* --- Create Instance Form --- */}
-        <section>
-          <h2 className="text-2xl font-semibold text-cyan-400 mb-6 text-center">Create New Instance</h2>
-          <form onSubmit={handleCreateSubmit} noValidate>
-            <FormInput id="whatsappNumber" label="WhatsApp Number" type="tel" value={whatsappNumber} onChange={(e) => setWhatsappNumber(e.target.value)} error={errors.whatsappNumber} required />
-            <FormInput id="instanceName" label="Instance Name" type="text" value={instanceName} onChange={(e) => setInstanceName(e.target.value)} error={errors.instanceName} required />
-            <FormInput id="apiKey" label="Apikey For Instance" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} error={errors.apiKey} required />
-            
-            {submitSuccess && (
-                <div className="bg-green-900/50 border border-green-500 text-green-300 px-4 py-3 rounded-lg text-sm my-4" role="alert">
-                    {submitSuccess}
-                </div>
-            )}
-            {submitError && (
-                <div className="bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-lg text-sm my-4" role="alert">
-                    {submitError}
-                </div>
-            )}
+  const renderEmailInput = (
+    id: string,
+    value: string,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void,
+    error: string | null
+  ) => (
+    <div className="space-y-2">
+      <label htmlFor={id} className="block text-sm font-medium text-gray-400">Email Address</label>
+      <div className="bg-gray-900/50 border border-gray-700 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all">
+        <input
+          type="email"
+          id={id}
+          value={value}
+          onChange={onChange}
+          className="w-full bg-transparent px-3 py-2.5 text-white placeholder-gray-500 outline-none"
+          placeholder="you@example.com"
+          required
+          aria-label="Email Address"
+        />
+      </div>
+      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+    </div>
+  );
 
-            <button type="submit" disabled={isSubmitting || !validateCreationForm()} className="w-full text-white bg-cyan-600 hover:bg-cyan-700 focus:ring-4 focus:outline-none focus:ring-cyan-800 font-medium rounded-lg text-sm px-5 py-3 text-center transition-colors duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center">
-              {isSubmitting ? ( <><svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Creating instance...</> ) : ( 'Create Instance' )}
-            </button>
-          </form>
-        </section>
+  const renderSpinner = () => (
+    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+  );
 
-        <hr className="my-10 border-gray-600" />
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-4">
+      <div className={`w-full max-w-2xl bg-gray-900/50 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl transition-all duration-500 ${isMounted ? 'opacity-100 animate-fade-in-up' : 'opacity-0'}`}>
+        <div className="p-8 sm:p-10">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">AI Bot Provisioner</h1>
+            <p className="text-gray-400 mt-2">Create and manage your WhatsApp AI bot.</p>
+          </div>
 
-        {/* --- Get QR Code Form --- */}
-        <section>
-            <h2 className="text-2xl font-semibold text-cyan-400 mb-6 text-center">Get Instance QR Code</h2>
-            <form onSubmit={handleQrSubmit} noValidate>
-                <FormInput id="qrInstanceName" label="Enter Instance Name" type="text" value={qrInstanceName} onChange={(e) => setQrInstanceName(e.target.value)} required />
-                <button type="submit" disabled={isFetchingQr} className="w-full text-white bg-teal-600 hover:bg-teal-700 focus:ring-4 focus:outline-none focus:ring-teal-800 font-medium rounded-lg text-sm px-5 py-3 text-center transition-colors duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center">
-                    {isFetchingQr ? ( <><svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Generating...</> ) : ( 'Get QR Code' )}
+          <div className="border-b border-gray-700">
+            <nav className="-mb-px flex gap-4 sm:gap-6" aria-label="Tabs">
+              {TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 shrink-0 border-b-2 px-1 pb-3 text-sm font-medium transition-colors duration-200
+                    ${activeTab === tab.id
+                      ? 'border-indigo-500 text-indigo-400'
+                      : 'border-transparent text-gray-400 hover:border-gray-500 hover:text-gray-300'
+                    }`}
+                  aria-current={activeTab === tab.id ? 'page' : undefined}
+                >
+                  {tab.icon}
+                  <span className="hidden sm:inline">{tab.label}</span>
                 </button>
-            </form>
-            {isFetchingQr && (
-              <p className="text-center text-cyan-400 mt-4">Generating QR code, please wait...</p>
+              ))}
+            </nav>
+          </div>
+
+          <div className="mt-8">
+            {activeTab === 'create' && (
+              <section>
+                <form onSubmit={handleCreateSubmit} noValidate className="space-y-6">
+                  {renderTextInput('create-name', 'Name', 'Enter your name', name, e => setName(e.target.value), errors.name)}
+                  {renderPhoneNumberInput('create', countryCode, e => setCountryCode(e.target.value), whatsappNumber, e => setWhatsappNumber(e.target.value.replace(/\D/g, '')), errors.whatsappNumber)}
+                  {renderEmailInput('create-email', email, e => setEmail(e.target.value), errors.email)}
+                  {submitSuccess && <div className="bg-green-500/10 border border-green-500/30 text-green-300 px-4 py-3 rounded-lg text-sm" role="alert">{submitSuccess}</div>}
+                  {submitError && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg text-sm" role="alert">{submitError}</div>}
+                  <button type="submit" disabled={isSubmitting || !validateCreationForm()} className="w-full flex items-center justify-center text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:outline-none focus:ring-indigo-500/50 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 disabled:bg-gray-700 disabled:cursor-not-allowed disabled:hover:bg-gray-700">
+                    {isSubmitting ? renderSpinner() : null}
+                    {isSubmitting ? 'Creating...' : 'Create Bot'}
+                  </button>
+                </form>
+              </section>
             )}
-            {qrError && (
-                <div className="bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-lg text-sm mt-4" role="alert">
-                    {qrError}
+
+            {activeTab === 'qr' && (
+              <section>
+                <form onSubmit={handleQrSubmit} noValidate className="space-y-6">
+                  {renderPhoneNumberInput('qr', qrCountryCode, e => setQrCountryCode(e.target.value), qrWhatsappNumber, e => setQrWhatsappNumber(e.target.value.replace(/\D/g, '')), qrInputError)}
+                  <button type="submit" disabled={isFetchingQr} className="w-full flex items-center justify-center text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:outline-none focus:ring-indigo-500/50 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 disabled:bg-gray-700 disabled:cursor-not-allowed">
+                     {isFetchingQr ? renderSpinner() : null}
+                     {isFetchingQr ? 'Generating...' : 'Get QR Code'}
+                  </button>
+                </form>
+                {qrError && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg text-sm mt-4" role="alert">{qrError}</div>}
+                {qrCodeUrl && !isFetchingQr && (
+                  <div className="mt-6 flex flex-col items-center gap-4 text-center bg-gray-900/50 p-6 rounded-lg border border-gray-700">
+                      <p className="text-green-400 font-semibold">Scan this QR code in WhatsApp to connect!</p>
+                      <div className="p-2 bg-white rounded-lg shadow-lg">
+                        <img src={qrCodeUrl} alt="QR Code" className="w-64 h-64" />
+                      </div>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {activeTab === 'disconnect' && (
+              <section className="space-y-6">
+                <div className="text-center bg-amber-500/10 p-4 rounded-lg border border-amber-500/20">
+                  <h3 className="font-semibold text-amber-300">Disconnect Your Bot</h3>
+                  <p className="text-sm text-amber-400/80 mt-1">This will log your bot out of WhatsApp. You can reconnect later by getting a new QR code.</p>
                 </div>
+                <form onSubmit={handleDisconnectSubmit} noValidate className="space-y-6">
+                  {renderPhoneNumberInput('disconnect', disconnectCountryCode, e => setDisconnectCountryCode(e.target.value), disconnectWhatsappNumber, e => setDisconnectWhatsappNumber(e.target.value.replace(/\D/g, '')), disconnectInputError)}
+                  {disconnectSuccess && <div className="bg-green-500/10 border border-green-500/30 text-green-300 px-4 py-3 rounded-lg text-sm" role="alert">{disconnectSuccess}</div>}
+                  {disconnectError && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg text-sm" role="alert">{disconnectError}</div>}
+                  <button type="submit" disabled={isDisconnecting} className="w-full flex items-center justify-center text-white bg-amber-600 hover:bg-amber-700 focus:ring-4 focus:outline-none focus:ring-amber-500/50 font-medium rounded-lg text-sm px-5 py-3 text-center transition-colors duration-300 disabled:bg-gray-700 disabled:cursor-not-allowed">
+                     {isDisconnecting ? renderSpinner() : null}
+                     {isDisconnecting ? 'Disconnecting...' : 'Disconnect Bot'}
+                  </button>
+                </form>
+              </section>
             )}
-            {qrCodeUrl && !isFetchingQr && (
-                 <div className="mt-6 flex flex-col items-center gap-4 text-center">
-                    <p className="text-green-400 font-semibold">Scan this QR code in WhatsApp!</p>
-                    <div className="p-2 bg-white rounded-lg shadow-lg">
-                      <img src={qrCodeUrl} alt="QR Code" style={{width: '250px', height: '250px'}} />
-                    </div>
+
+            {activeTab === 'delete' && (
+              <section className="space-y-6">
+                <div className="text-center bg-red-500/10 p-4 rounded-lg border border-red-500/20">
+                  <h3 className="font-semibold text-red-300">Delete Your Bot</h3>
+                  <p className="text-sm text-red-400/80 mt-1">Warning: This action is irreversible and will permanently delete your bot.</p>
                 </div>
+                <form onSubmit={handleDeleteSubmit} noValidate className="space-y-6">
+                  {renderPhoneNumberInput('delete', deleteCountryCode, e => setDeleteCountryCode(e.target.value), deleteWhatsappNumber, e => setDeleteWhatsappNumber(e.target.value.replace(/\D/g, '')), deleteInputError)}
+                  {deleteSuccess && <div className="bg-green-500/10 border border-green-500/30 text-green-300 px-4 py-3 rounded-lg text-sm" role="alert">{deleteSuccess}</div>}
+                  {deleteError && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg text-sm" role="alert">{deleteError}</div>}
+                  <button type="submit" disabled={isDeleting} className="w-full flex items-center justify-center text-white bg-red-600 hover:bg-red-700 focus:ring-4 focus:outline-none focus:ring-red-500/50 font-medium rounded-lg text-sm px-5 py-3 text-center transition-colors duration-300 disabled:bg-gray-700 disabled:cursor-not-allowed">
+                     {isDeleting ? renderSpinner() : null}
+                     {isDeleting ? 'Deleting...' : 'Delete Bot Permanently'}
+                  </button>
+                </form>
+              </section>
             )}
-        </section>
+          </div>
+        </div>
       </div>
     </div>
   );
