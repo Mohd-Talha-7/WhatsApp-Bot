@@ -168,26 +168,42 @@ const App: React.FC = () => {
       });
   
       const createData = await createResponse.json().catch(() => {
-        return { 
-          success: false, 
-          message: 'Server returned an invalid response. Please try again.' 
-        };
+        throw new Error('Server returned an invalid response. Please try again.');
       });
 
-      if (!createResponse.ok || !createData.qrCode) {
-        throw new Error(createData.message || 'An unknown error occurred and QR code was not received.');
+      if (!createResponse.ok || !createData.success) {
+        throw new Error(createData.message || 'An unknown error occurred during bot creation.');
       }
 
-      const qrSrc = createData.qrCode;
-      
-      const successMessage = 'Scan this QR to connect and create bot.';
-      
       setCreationStatus('generating_qr');
-      
-      await new Promise(resolve => setTimeout(resolve, 10000));
+      const instanceName = createData.instanceName || 'your bot';
+      let successMsg = '';
+      let qrUrl = null;
 
-      setQrCodeUrl(qrSrc);
-      setSubmitSuccess(successMessage);
+      switch(createData.status) {
+        case 'new':
+          successMsg = `✅ Your bot '${instanceName}' has been created successfully! Scan the QR code below to log in.`;
+          qrUrl = createData.qrCode;
+          break;
+        case 'pending_qr':
+          successMsg = `⚠️ Your bot '${instanceName}' is already created. Please scan the QR code below to log in or connect.`;
+          qrUrl = createData.qrCode;
+          break;
+        case 'connected':
+          successMsg = `✅ Your bot '${instanceName}' is already created and logged in/connected. No QR needed.`;
+          qrUrl = null;
+          break;
+        default:
+          throw new Error(`Received an unknown status from the server: ${createData.status}`);
+      }
+
+      if ((createData.status === 'new' || createData.status === 'pending_qr') && !qrUrl) {
+        throw new Error('Server indicated a QR code was needed, but none was provided.');
+      }
+      
+      setQrCodeUrl(qrUrl);
+      setSubmitSuccess(successMsg);
+
       setWhatsappNumber('');
       setCountryCode('+91');
       setEmail('');
@@ -225,17 +241,30 @@ const App: React.FC = () => {
         });
 
         const data = await response.json().catch(() => {
-            if (response.ok) return { success: true, message: 'Bot disconnected successfully.' };
-            throw new Error('Failed to parse server response.');
+            throw new Error('Server returned an invalid response. Please try again.');
         });
 
-        if (response.ok && data.success === true) {
-            setDisconnectSuccess(data.message || 'Bot disconnected successfully!');
-            setDisconnectWhatsappNumber('');
-            setDisconnectCountryCode('+91');
-            setHasAttemptedDisconnect(false);
-        } else {
-            throw new Error(data.message || 'Failed to disconnect bot.');
+        if (!response.ok) {
+            throw new Error(data.message || 'An unknown server error occurred.');
+        }
+        
+        const instanceName = data.instanceName ? `'${data.instanceName}' ` : '';
+
+        switch(data.status) {
+            case 'success':
+                setDisconnectSuccess(`✅ Your bot ${instanceName}has been disconnected successfully.`);
+                setDisconnectWhatsappNumber('');
+                setDisconnectCountryCode('+91');
+                setHasAttemptedDisconnect(false);
+                break;
+            case 'warning':
+                setDisconnectError(`⚠️ Your bot ${instanceName}exists but is not connected. Please connect first before disconnecting.`);
+                break;
+            case 'error':
+                setDisconnectError(`❌ No bot found for this WhatsApp number. Please create a bot first.`);
+                break;
+            default:
+                throw new Error(data.message || `Received an unknown status from the server: ${data.status}`);
         }
 
     } catch (error) {
@@ -427,20 +456,29 @@ const App: React.FC = () => {
                   {renderPhoneNumberInput('create', countryCode, e => setCountryCode(e.target.value), whatsappNumber, e => setWhatsappNumber(e.target.value.replace(/\D/g, '')), errors.whatsappNumber)}
                   {renderEmailInput('create-email', email, e => setEmail(e.target.value), errors.email)}
                   
-                  {submitSuccess && !qrCodeUrl && <div className="bg-green-500/10 border border-green-500/30 text-green-300 px-4 py-3 rounded-lg text-sm" role="alert">{submitSuccess}</div>}
                   {submitError && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg text-sm" role="alert">{submitError}</div>}
                   
                   <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:outline-none focus:ring-indigo-500/50 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 disabled:bg-gray-700 disabled:cursor-not-allowed disabled:hover:bg-gray-700">
                     {isSubmitting ? renderSpinner() : null}
-                    {isSubmitting ? (creationStatus === 'generating_qr' ? 'Preparing QR Code...' : 'Creating...') : 'Create Bot and Get QR'}
+                    {isSubmitting ? (creationStatus === 'generating_qr' ? 'Finalizing...' : 'Creating...') : 'Create Bot and Get QR'}
                   </button>
                 </form>
-                {qrCodeUrl && !isSubmitting && (
+
+                {submitSuccess && !isSubmitting && (
                   <div className="mt-6 flex flex-col items-center gap-4 text-center bg-gray-900/50 p-6 rounded-lg border border-gray-700 animate-fade-in-up">
-                      <p className="text-green-400 font-semibold">{submitSuccess}</p>
+                    <p className={`font-semibold ${
+                      submitSuccess.startsWith('✅') ? 'text-green-400' :
+                      submitSuccess.startsWith('⚠️') ? 'text-amber-400' :
+                      'text-gray-300'
+                    }`}>
+                      {submitSuccess}
+                    </p>
+                    
+                    {qrCodeUrl && (
                       <div className="p-2 bg-white rounded-lg shadow-lg">
                         <img src={qrCodeUrl} alt="QR Code" className="w-64 h-64" />
                       </div>
+                    )}
                   </div>
                 )}
               </section>
